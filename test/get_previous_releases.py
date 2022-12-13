@@ -148,6 +148,24 @@ def download_binary(tag, args) -> int:
     ret = subprocess.run(['tar', '-zxf', tarball, '-C', tag,
                           '--strip-components=1',
                           'bitcoin-{tag}'.format(tag=tag[1:])]).returncode
+
+    if tag >= "v23" and platform == "arm64-apple-darwin":
+        # Starting with v23.0 there are arm64 binaries for ARM (M1/M2) macs, but they have to be signed to run
+        binary_path = f'{os.getcwd()}/{tag}/bin/bitcoind'
+
+        # Is it already signed?
+        result = subprocess.run(['codesign', '-v', '-d', binary_path], capture_output=True)
+        if "code object is not signed at all" in result.stderr.decode("utf-8"):
+            # Have to self-sign the binary
+            subprocess.run(['codesign', '-s', '-', binary_path], capture_output=True)
+
+            # Confirm success
+            result = subprocess.run(['codesign', '-v', '-d', binary_path], capture_output=True)
+            if "Signature=adhoc" not in result.stderr.decode("utf-8"):
+                print(f"Failed to self-sign {tag} arm64 binary")
+                return 1
+            print(f"Successfully self-signed {tag} arm64 binary")
+
     if ret:
         return ret
 
